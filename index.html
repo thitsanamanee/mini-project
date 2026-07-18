@@ -12,14 +12,14 @@
         body {
             font-family: 'Inter', sans-serif;
         }
-        /* ปรับแต่ง Canvas ของเว็บแคมให้อยู่ในกรอบ ขอบมน และกระจกเงา */
-        #webcam-container canvas {
+        /* ปรับแต่งแท็ก Video ของเว็บแคมให้อยู่ในกรอบ ขอบมน และเป็นกระจกเงา */
+        #webcam-video {
             border-radius: 1rem;
             box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
             width: 100% !important;
-            height: auto !important;
-            max-width: 280px;
-            transform: scaleX(-1); /* กลับด้านกล้องซ้ายขวาให้เป็นธรรมชาติ */
+            height: 100% !important;
+            object-fit: cover;
+            transform: scaleX(-1); /* กลับด้านกล้องซ้ายขวาให้เป็นธรรมชาติแบบกระจกเงา */
         }
     </style>
 </head>
@@ -34,15 +34,19 @@
                 <p class="text-xs text-slate-400 mb-6 tracking-wide">วิเคราะห์โมเดลและประมวลผลคำนวณใหม่ทุก ๆ 3 วินาที</p>
             </div>
 
-            <!-- กล่องสำหรับแสดงเว็บแคม -->
+            <!-- กล่องสำหรับแสดงเว็บแคม (เปลี่ยนโครงสร้างเป็น HTML5 Video แท้) -->
             <div class="relative w-full flex justify-center items-center my-4">
-                <div id="webcam-container" class="w-[260px] h-[260px] bg-slate-950 rounded-2xl flex items-center justify-center border-2 border-dashed border-slate-800 overflow-hidden">
-                    <div id="webcam-placeholder" class="text-slate-500 text-xs p-4">
+                <div id="webcam-container" class="w-[260px] h-[260px] bg-slate-950 rounded-2xl flex items-center justify-center border-2 border-dashed border-slate-800 overflow-hidden relative">
+                    
+                    <div id="webcam-placeholder" class="text-slate-500 text-xs p-4 z-10 absolute text-center">
                         <svg class="mx-auto h-12 w-12 mb-3 text-slate-700 animate-pulse" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                         </svg>
                         โปรดกดปุ่มด้านล่างเพื่ออนุญาตเข้าถึงกล้อง
                     </div>
+
+                    <!-- แท็ก Video สำหรับสตรีมภาพสดจากเว็บแคม -->
+                    <video id="webcam-video" autoplay playsinline muted class="hidden"></video>
                 </div>
             </div>
 
@@ -84,48 +88,46 @@
     <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
     
     <script type="text/javascript">
-        // ลิงก์โมเดลของคุณจาก Teachable Machine
-        const URL = "https://teachablemachine.withgoogle.com/models/K45h-E9e2/";
+        // ลิงก์โมเดลของคุณจาก Teachable Machine[cite: 4]
+        const URL = "https://teachablemachine.withgoogle.com/models/K45h-E9e2/";[cite: 4]
 
-        let model, webcam, labelContainer, maxPredictions;
+        let model, labelContainer, maxPredictions;
+        let webcamVideo;
         let predictInterval; // ตัวแปรสำหรับควบคุมลูปเวลา 3 วินาที
 
         async function init() {
             const btnStart = document.getElementById("btn-start");
             const statusBadge = document.getElementById("status-badge");
+            webcamVideo = document.getElementById("webcam-video");
             
             // ปรับแต่ง UI ปุ่มในขณะโหลดโมเดล
             btnStart.disabled = true;
             btnStart.innerHTML = `<svg class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> กำลังโหลดโมเดล...`;
             
-            const modelURL = URL + "model.json";
-            const metadataURL = URL + "metadata.json";
+            const modelURL = URL + "model.json";[cite: 4]
+            const metadataURL = URL + "metadata.json";[cite: 4]
 
             try {
-                // 1. โหลดโครงข่ายประสาทเทียมและข้อมูล Meta
-                model = await tmImage.load(modelURL, metadataURL);
-                maxPredictions = model.getTotalClasses();
+                // 1. โหลดโครงข่ายประสาทเทียมและข้อมูล Meta[cite: 4]
+                model = await tmImage.load(modelURL, metadataURL);[cite: 4]
+                maxPredictions = model.getTotalClasses();[cite: 4]
 
-                // 2. ตั้งค่าเว็บแคมสตรีมมิ่ง
-                const flip = true; 
-                webcam = new tmImage.Webcam(260, 260, flip); 
-                await webcam.setup(); 
-                await webcam.play();
+                // 2. เรียกเปิดกล้องผ่าน Web API มาตรฐานสากล (แก้ปัญหาเบราว์เซอร์บล็อกกล้อง)
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 260, height: 260, facingMode: "user" },
+                    audio: false
+                });
                 
-                // เริ่มระบบวาดภาพกราฟิกเว็บแคมแบบเรียลไทม์ (60 FPS)
-                window.requestAnimationFrame(loop);
-
-                // เคลียร์หน้าจอตัวหนังสือเริ่มต้นเพื่อส่งกล้องเว็บแคมเข้าแทนที่
+                // ส่งสัญญาณสตรีมเข้าแท็ก video และสั่งเล่นภาพสด
+                webcamVideo.srcObject = stream;
+                webcamVideo.classList.remove("hidden");
                 document.getElementById("webcam-placeholder").style.display = "none";
-                const webcamBox = document.getElementById("webcam-container");
-                webcamBox.innerHTML = "";
-                webcamBox.appendChild(webcam.canvas);
 
-                // 3. เจนเนอเรตหลอดสถานะ Progress Bar ตามจำนวนคลาสที่โมเดลมีอัตโนมัติ
-                labelContainer = document.getElementById("label-container");
+                // 3. เจนเนอเรตหลอดสถานะ Progress Bar ตามจำนวนคลาสที่โมเดลมีอัตโนมัติ[cite: 4]
+                labelContainer = document.getElementById("label-container");[cite: 4]
                 labelContainer.innerHTML = ""; 
                 
-                for (let i = 0; i < maxPredictions; i++) {
+                for (let i = 0; i < maxPredictions; i++) {[cite: 4]
                     const classCard = document.createElement("div");
                     classCard.className = "space-y-1.5 bg-slate-950/40 p-3 rounded-xl border border-slate-800/40";
                     classCard.innerHTML = `
@@ -137,7 +139,7 @@
                             <div class="class-progress bg-indigo-600 h-full rounded-full transition-all duration-700 ease-out" style="width: 0%"></div>
                         </div>
                     `;
-                    labelContainer.appendChild(classCard);
+                    labelContainer.appendChild(classCard);[cite: 4]
                 }
 
                 // ปรับแต่ง Badge สถานะของแดชบอร์ด
@@ -145,36 +147,34 @@
                 statusBadge.className = "bg-emerald-500/10 text-emerald-400 text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-widest border border-emerald-500/20";
                 btnStart.className = "hidden"; // ซ่อนปุ่มกดเมื่อระบบรันสำเร็จอย่างสมบูรณ์
 
-                // 🌟 [핵심] สั่งรัน AI วิเคราะห์รอบแรกทันที และตั้งเวลาให้วนลูปทุกๆ 3 วินาที (3000ms)
+                // 🌟 สั่งรัน AI วิเคราะห์รอบแรกทันที และตั้งเวลาให้วนลูปทุกๆ 3 วินาที (3000ms)
                 await predict();
                 predictInterval = setInterval(predict, 3000);
 
             } catch (error) {
                 console.error(error);
-                alert("เกิดข้อผิดพลาด: ไม่สามารถเปิดเว็บแคมได้ หรือสัญญานเชื่อมต่อโมเดลขัดข้อง");
+                alert("เกิดข้อผิดพลาด: ไม่สามารถเปิดเว็บแคมได้ โปรดตรวจสอบสิทธิ์การเข้าถึงกล้อง หรือลองเปิดใช้งานผ่าน Local Server (เช่น Live Server บน VS Code)");
                 btnStart.disabled = false;
-                btnStart.innerText = "ลองใหม่อีกครั้ง";
+                btnStart.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 110 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                    </svg> ลองใหม่อีกครั้ง`;
             }
         }
 
-        // ฟังก์ชันวาดเฟรมเว็บแคม ทำงานเรียลไทม์เพื่อให้ภาพเคลื่อนไหวลื่นไหลเป็นธรรมชาติ
-        async function loop() {
-            webcam.update(); 
-            window.requestAnimationFrame(loop);
-        }
-
-        // ฟังก์ชันส่งภาพไปประมวลผลบน AI (ทำงานตัดรอบแบบ Throttling ทุกๆ 3 วินาที)
+        // ฟังก์ชันส่งภาพจากแท็ก Video ไปประมวลผลบน AI (ทำงานทุกๆ 3 วินาที)
         async function predict() {
-            if (!model || !webcam) return;
+            if (!model || !webcamVideo) return;
             
-            const prediction = await model.predict(webcam.canvas);
+            // สามารถส่งแท็ก video เข้าไปให้โมเดลทำนายผลได้โดยตรง[cite: 4]
+            const prediction = await model.predict(webcamVideo);[cite: 4]
             
-            for (let i = 0; i < maxPredictions; i++) {
-                const className = prediction[i].className;
-                const probability = prediction[i].probability;
+            for (let i = 0; i < maxPredictions; i++) {[cite: 4]
+                const className = prediction[i].className;[cite: 4]
+                const probability = prediction[i].probability;[cite: 4]
                 const percentage = (probability * 100).toFixed(0) + "%";
                 
-                // ใช้ .children เพื่อดึงแท็ก Element ลูกที่แท้จริงอย่างแม่นยำ ป้องกัน Bug ค่าเลื่อน
+                // ใช้ .children เพื่อดึงตำแหน่งกล่องคลาสอย่างแม่นยำ
                 const card = labelContainer.children[i]; 
                 if (card && card.querySelector) {
                     card.querySelector(".class-name").innerText = className;
