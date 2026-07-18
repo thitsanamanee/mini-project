@@ -1,3 +1,4 @@
+HTML
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -172,7 +173,8 @@
                 const probability = prediction[i].probability;[cite: 3]
                 const percentage = (probability * 100).toFixed(0) + "%";
                 
-                const card = labelContainer.childNodes[i];[cite: 3]
+                // 🛠️ แก้ไขจาก .childNodes เป็น .children เพื่อป้องกัน Text Node Bug ของกล่อง HTML
+                const card = labelContainer.children[i]; 
                 if (card && card.querySelector) {
                     card.querySelector(".class-name").innerText = className;
                     card.querySelector(".class-percentage").innerText = percentage;
